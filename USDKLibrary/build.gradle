@@ -1,0 +1,65 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.3"
+
+
+    defaultConfig {
+        minSdkVersion 22
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
+    }
+
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+}
+
+// Automatic calculation of version number based date: 2018-11-16 <==> 2.4.0 (240)
+// Format: (Year - 2016).(Month).(Day)
+TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"))
+def date = new Date()
+def year = date[Calendar.YEAR]
+def month = 1 + date[Calendar.MONTH]        // 0 ~ 11
+def day = date[Calendar.DAY_OF_MONTH]
+//versionCode Integer.parseInt(String.format("%d%02d%02d", year - 2016, month, day))
+def versionName = String.format("%4d%02d%02d", year, month, day)
+
+// 修改jar名称 将指定的jar生成的地方
+task makeJar(type: Copy) {
+    //删除存在的
+//    delete 'hsaemusic' + versionName + '.jar'
+    //设置拷贝的文件
+    from('build/intermediates/packaged-classes/release/')
+    //打进jar包后的文件目录
+    into('libs/')
+    // 将class.jar放入build/libs/目录下
+    // include , exclude 参数来设置过滤
+    // 我们只关心 classes.jar 这个文件
+    include('classes.jar')
+    //重命名
+    rename('classes.jar', 'USDKLibrary' + versionName + '.jar')
+}
+makeJar.dependsOn(build)
