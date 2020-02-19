@@ -4,109 +4,148 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
 
+import com.ubx.usdk.USDKManager.StatusListener;
 import com.ubx.usdk.USDKManager.FEATURE_TYPE;
 import com.ubx.usdk.USDKManager.STATUS;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
-import static com.ubx.usdk.LogUtil.LOGE;
 
-public class USDKBaseManager implements ServiceConnection{
+public class USDKBaseManager implements ServiceConnection {
     private Context mContext;
     private FEATURE_TYPE mFeatureType;
     private Intent mServiceIntent;
-    private IBinder mIBinder;
-    private STATUS mStatus = STATUS.UNKNOWN;
+    private volatile IBinder mIBinder;
+    private volatile STATUS mStatus = STATUS.UNKNOWN;
 
-    protected USDKBaseManager(){
+    private List<StatusListener> mStatusListeners;
+
+    protected USDKBaseManager() {
     }
 
     protected USDKBaseManager(Context context, FEATURE_TYPE featureType) {
         mContext = context;
         mFeatureType = featureType;
+        mStatusListeners = new ArrayList<StatusListener>();
     }
 
-    protected void setIntent(Intent intent){
+    protected void setIntent(Intent intent) {
         mServiceIntent = intent;
     }
 
-    protected IBinder getIBinder(){
+    protected IBinder getIBinder() {
+        if(mStatus == STATUS.NOT_READY && Looper.getMainLooper().getThread() == Thread.currentThread()){
+            final long waitTime = System.currentTimeMillis();
+            while (mStatus == STATUS.NOT_READY && System.currentTimeMillis() - waitTime < 2000) {
+                try {
+                    LogUtil.d("getIBinder wait " + (System.currentTimeMillis() - waitTime));
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
         return mIBinder;
     }
 
-    protected void setType(FEATURE_TYPE featureType) {
-        mFeatureType = featureType;
-    }
-
-    public FEATURE_TYPE getType() {
+    public FEATURE_TYPE getFeatureType() {
         return mFeatureType;
     }
 
-    protected void setStatus(STATUS status){
-        mStatus = status;
+    public STATUS getStatus() {
+            return mStatus;
     }
 
-    public STATUS getStatus(){
-        return  mStatus;
+    public void addStatusListener(StatusListener statusListener) {
+        if(mStatusListeners != null && !mStatusListeners.contains(statusListener))
+            mStatusListeners.add(statusListener);
     }
 
-    public void init(){
-        if(mStatus != STATUS.SUCCESS || mStatus != STATUS.BINDING) {
-            boolean status = mContext.bindService(mServiceIntent, this, Context.BIND_AUTO_CREATE);
-            if(status) {
-                mStatus = STATUS.BINDING;
+    private void callOnStatus() {
+        if (mStatusListeners != null) {
+            for (StatusListener listener : mStatusListeners) {
+                listener.onStatus(mFeatureType, mStatus);
+            }
+        }
+    }
+
+    public synchronized void initialize() {
+        if(mIBinder != null && mIBinder.isBinderAlive()) {
+            mStatus = STATUS.SUCCESS;
+            callOnStatus();
+            return;
+        }
+        if (mStatus != STATUS.SUCCESS || mStatus != STATUS.NOT_READY) {
+            LogUtil.d("bindService " + mStatus);
+            boolean status = mContext.bindService(mServiceIntent, USDKBaseManager.this, Context.BIND_AUTO_CREATE);
+            if (status) {
+                mStatus = STATUS.NOT_READY;
             } else {
                 mStatus = STATUS.NO_SERVICE;
             }
         }
+        if(mIBinder != null && !mIBinder.isBinderAlive()) {
+            mIBinder = null;
+        }
+        callOnStatus();
     }
 
     @Override
     public void onServiceConnected(ComponentName name, IBinder service) {
-        LogUtil.d("onServiceConnected: "+ name.toShortString());
+        LogUtil.d("onServiceConnected: " + name.toShortString());
         mIBinder = service;
         mStatus = STATUS.SUCCESS;
         try {
             service.linkToDeath(mDeathHandle, 0);
-        }catch (RemoteException e) {
+        } catch (RemoteException e) {
             LogUtil.e("linkToDeath RemoteException");
         }
+        callOnStatus();
     }
 
     @Override
     public void onServiceDisconnected(ComponentName name) {
-        LogUtil.d("onServiceDisconnected: "+ name.toShortString());
-        mStatus = STATUS.DISCONNECT;
+        LogUtil.d("onServiceDisconnected: " + name.toShortString());
     }
 
-    @Override
-    public void onBindingDied(ComponentName name) {
-        LogUtil.d("onBindingDied: "+ name.toShortString());
-        mStatus = STATUS.DISCONNECT;
-        init();
-    }
-
-    @Override
-    public void onNullBinding(ComponentName name) {
-        LogUtil.d("onNullBinding: "+ name.toShortString());
-        mStatus = STATUS.DISCONNECT;
-    }
-
-    final IBinder.DeathRecipient mDeathHandle = new IBinder.DeathRecipient() {
+    IBinder.DeathRecipient mDeathHandle = new IBinder.DeathRecipient() {
 
         @Override
         public void binderDied() {
             // TODO Auto-generated method stub
-            if(mIBinder != null) {
+            if (mIBinder != null) {
                 mIBinder.unlinkToDeath(mDeathHandle, 0);
             }
+            mStatus = STATUS.NOT_ALIVE;
             LogUtil.e("DeathRecipient binderDied");
-            init();
+            initialize();
+            callOnStatus();
         }
     };
+
+
+    public void release() {
+//        new Handler(Looper.getMainLooper()).post(new Runnable() {
+//            @Override
+//            public void run() {
+                if (mIBinder != null) {
+                    mIBinder.unlinkToDeath(mDeathHandle, 0);
+                }
+                mContext.unbindService(USDKBaseManager.this);
+                mIBinder = null;
+                mStatus = STATUS.RELEASE;
+                //callOnStatus();
+                if(mStatusListeners != null) {
+                    mStatusListeners.clear();
+                }
+//            }
+//        });
+
+    }
 }

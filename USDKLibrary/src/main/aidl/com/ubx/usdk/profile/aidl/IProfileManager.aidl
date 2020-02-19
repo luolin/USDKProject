@@ -5,4 +5,5 @@ package com.ubx.usdk.profile.aidl;
 
 interface IProfileManager {
     String getVersion();
+    String getDeviceId();
 }

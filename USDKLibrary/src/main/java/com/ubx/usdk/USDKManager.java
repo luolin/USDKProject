@@ -2,11 +2,13 @@ package com.ubx.usdk;
 
 import android.content.Context;
 
+import com.ubx.usdk.profile.ProfileManager;
+
 public class USDKManager {
 
     private volatile static USDKManager mInstance;
     private static Context mContext;
-    private ProfileManager mProfileMananger;
+    private com.ubx.usdk.profile.ProfileManager mProfileMananger;
 
 
     public static enum FEATURE_TYPE {
@@ -17,12 +19,17 @@ public class USDKManager {
     }
 
     public static enum STATUS {
-        SUCCESS,
         NOT_SUPPORTED,
         NO_SERVICE,
-        BINDING,
-        DISCONNECT,
+        NOT_READY,
+        SUCCESS,
+        RELEASE,
+        NOT_ALIVE,
         UNKNOWN
+    }
+
+    public interface StatusListener {
+        void onStatus(USDKManager.FEATURE_TYPE featureType, STATUS status);
     }
 
     private USDKManager(Context context){
@@ -38,21 +45,50 @@ public class USDKManager {
         return mInstance;
     }
 
-    public static USDKBaseManager getInstance(Context context, FEATURE_TYPE featureType) {
+    public static USDKBaseManager getFeatureManager(Context context, FEATURE_TYPE featureType) {
         if(mInstance == null) {
             synchronized (USDKManager.class) {
                 mInstance = new USDKManager(context);
             }
         }
 
-        return mInstance.getUSDKManager(featureType);
+        return mInstance.getFeatureManager(featureType);
     }
 
-    public USDKBaseManager getUSDKManager(FEATURE_TYPE featureType) {
+    public USDKBaseManager getFeatureManagerAsync(USDKManager.FEATURE_TYPE featureType, USDKManager.StatusListener statusListener) {
+        switch (featureType) {
+            case PROFILE:
+                if (mProfileMananger == null || mProfileMananger.getStatus() == STATUS.RELEASE) {
+                    mProfileMananger = new ProfileManager(mContext);
+                    mProfileMananger.addStatusListener(statusListener);
+                    mProfileMananger.initialize();
+                }else {
+                    if(statusListener != null) {
+                        mProfileMananger.addStatusListener(statusListener);
+                        mProfileMananger.initialize();
+                    }
+                }
+                return mProfileMananger;
+            case BARCODE:
+
+                ;
+            case RFID:
+
+                ;
+            case PSAM:
+
+                ;
+            default:
+                return new USDKBaseManager();
+        }
+    }
+
+    public USDKBaseManager getFeatureManager(FEATURE_TYPE featureType) {
         switch (featureType) {
             case PROFILE:
                 if (mProfileMananger == null) {
                     mProfileMananger = new ProfileManager(mContext);
+                    mProfileMananger.initialize();
                 }
                 return mProfileMananger;
             case BARCODE:
@@ -70,14 +106,19 @@ public class USDKManager {
     }
 
     public void release() {
+        if (mProfileMananger != null) {
+            mProfileMananger.release();
+            mProfileMananger = null;
+        }
 
     }
 
     public void release(FEATURE_TYPE featureType){
         switch (featureType) {
             case PROFILE:
-                if (mProfileMananger == null) {
-                    mProfileMananger = new ProfileManager(mContext);
+                if (mProfileMananger != null) {
+                    mProfileMananger.release();
+                    mProfileMananger = null;
                 }
             case BARCODE:
 
