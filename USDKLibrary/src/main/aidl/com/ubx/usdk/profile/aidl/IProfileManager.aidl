@@ -5,5 +5,14 @@ package com.ubx.usdk.profile.aidl;
 
 interface IProfileManager {
     String getVersion();
-    String getDeviceId();
+
+    IBinder getApplicationIBinder();
+
+    IBinder getDeviceControlIBinder();
+
+    IBinder getNetworkPolicyIBinder();
+
+    IBinder getRestrictionIBinder();
+
+    IBinder getSecurityPolicyIBinder();
 }

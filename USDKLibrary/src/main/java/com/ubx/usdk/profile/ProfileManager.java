@@ -9,10 +9,14 @@ import com.ubx.usdk.USDKBaseManager;
 import com.ubx.usdk.USDKManager;
 import com.ubx.usdk.USDKManager.STATUS;
 import com.ubx.usdk.USDKManager.FEATURE_TYPE;
+import com.ubx.usdk.profile.aidl.IApplicationPolicy;
 import com.ubx.usdk.profile.aidl.IProfileManager;
 
 public class ProfileManager extends USDKBaseManager implements USDKManager.StatusListener {
+
     private IProfileManager mIProfileManager;
+
+    private ApplicationManager mApplicationManager;
 
     public ProfileManager(Context context) {
         super(context, USDKManager.FEATURE_TYPE.PROFILE);
@@ -33,10 +37,16 @@ public class ProfileManager extends USDKBaseManager implements USDKManager.Statu
         }
     }
 
+    public IProfileManager getIProfileManager() {
+        return mIProfileManager;
+    }
+
     @Override
     public void release() {
         super.release();
         mIProfileManager = null;
+
+        mApplicationManager = null;
     }
 
     public String getVersion() {
@@ -44,20 +54,16 @@ public class ProfileManager extends USDKBaseManager implements USDKManager.Statu
             try {
                 return mIProfileManager.getVersion();
             } catch (RemoteException | NullPointerException e) {
-                LogUtil.e("IProfileManager", e);
+                LogUtil.e("getVersion", e);
             }
         }
         return "";
     }
 
-    public String getDeviceId() {
-        if(mIProfileManager != null) {
-            try {
-                return mIProfileManager.getDeviceId();
-            } catch (RemoteException | NullPointerException e) {
-                LogUtil.e("IProfileManager", e);
-            }
+    public ApplicationManager getApplicationManager(){
+        if(mApplicationManager == null) {
+            mApplicationManager = new ApplicationManager(this);
         }
-        return "";
+        return mApplicationManager;
     }
 }
